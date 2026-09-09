@@ -34,8 +34,9 @@
 | STT    | MSSV          | Họ và Tên              | Github                                               | Email                   |
 |:------:|:-------------:|:-----------------------|:-----------------------------------------------------|:------------------------|
 | 1      |               |                        |                                                      |                         |
-| 2      | 23520588      | Nguyễn Lan Hương       | [Hinno](https://github.com/HinnoNguyen)              | 23520588@gm.uit.edu.vn  |
+| 2      |               |                        |                                                      |                         |
 | 3      |               |                        |                                                      |                         |
+| 4      | 23520588      | Nguyễn Lan Hương       | [Hinno](https://github.com/HinnoNguyen)              | 23520588@gm.uit.edu.vn  |
 
 
 ## ĐỒ ÁN MÔN HỌC
