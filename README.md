@@ -21,7 +21,7 @@
 <a name="gioithieumonhoc"></a>
 * **Tên môn học**: Điện toán đám mây
 * **Mã môn học**: IS402
-* **Lớp học**: *(Đang cập nhật)*
+* **Lớp học**: IS402.R11
 * **Năm học**: 2026-2027
 
 
