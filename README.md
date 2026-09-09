@@ -43,15 +43,12 @@
 ## BÀI TẬP QUÁ TRÌNH
 <a name="baitapquatrinh"></a>
 
-* **Tuần 2**: Managing Azure Storage Accounts — [BTQT](./BTQT)
+- Tên đề tài: Managing Azure Storage Accounts 
+- [Đường dẫn tới thư mục](./BTQT)
 
 
 ## BÀI TẬP ĐỒ ÁN
 <a name="doan"></a>
 
-* **Thư mục**: [BTDA](./BTDA)
-
-### 📌 Đề tài: *(Đang cập nhật)*
-
-#### 📖 Giới thiệu đề tài
-*(Đang cập nhật)*
+- Tên đề tài: 
+- [Đường dẫn tới thư mục](./BTDA)
