@@ -13,7 +13,8 @@
 * [ Giới thiệu môn học](#gioithieumonhoc)
 * [ Giảng viên hướng dẫn](#giangvien)
 * [ Thành viên nhóm](#thanhvien)
-* [ Đồ án môn học](#doan)
+* [ Bài tập quá trình](#baitapquatrinh)
+* [ Bài tập đồ án](#doan)
 
 
 ## GIỚI THIỆU MÔN HỌC
@@ -39,8 +40,18 @@
 | 4      | 23520588      | Nguyễn Lan Hương       | [Hinno](https://github.com/HinnoNguyen)              | 23520588@gm.uit.edu.vn  |
 
 
-## ĐỒ ÁN MÔN HỌC
+## BÀI TẬP QUÁ TRÌNH
+<a name="baitapquatrinh"></a>
+
+| Tuần | Tên đề tài / Nội dung | Thư mục |
+|:---:|:---|:---:|
+| Tuần 2 | Managing Azure Storage Accounts | [BTQT](./BTQT) |
+
+
+## BÀI TẬP ĐỒ ÁN
 <a name="doan"></a>
+
+* **Thư mục**: [BTDA](./BTDA)
 
 ### 📌 Đề tài: *(Đang cập nhật)*
 
