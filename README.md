@@ -43,9 +43,7 @@
 ## BÀI TẬP QUÁ TRÌNH
 <a name="baitapquatrinh"></a>
 
-| Tuần | Tên đề tài / Nội dung | Thư mục |
-|:---:|:---|:---:|
-| Tuần 2 | Managing Azure Storage Accounts | [BTQT](./BTQT) |
+* **Tuần 2**: Managing Azure Storage Accounts — [BTQT](./BTQT)
 
 
 ## BÀI TẬP ĐỒ ÁN
