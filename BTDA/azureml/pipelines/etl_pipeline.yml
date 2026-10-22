@@ -1,0 +1,35 @@
+# DataOps pipeline: ADLS raw zone -> data_prep -> ADLS processed zone
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: banking77-etl
+experiment_name: banking77-etl
+description: Automated ETL from the raw zone to the processed zone of the data lake
+
+inputs:
+  raw_data:
+    type: uri_folder
+    path: azureml://datastores/datalake_raw/paths/banking77/
+  mapping:
+    type: uri_file
+    path: ../../config/intent_mapping.json
+
+outputs:
+  processed_data:
+    type: uri_folder
+    mode: rw_mount
+    path: azureml://datastores/datalake_processed/paths/banking77/${{name}}/
+
+settings:
+  default_compute: azureml:cpu-cluster
+
+jobs:
+  data_prep:
+    type: command
+    component: ../components/data_prep.yml
+    identity:
+      type: managed            # use the cluster's managed identity to access the data lake
+    inputs:
+      raw_data: ${{parent.inputs.raw_data}}
+      mapping: ${{parent.inputs.mapping}}
+    outputs:
+      processed_data: ${{parent.outputs.processed_data}}

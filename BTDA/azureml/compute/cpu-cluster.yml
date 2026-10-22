@@ -1,0 +1,12 @@
+# Shared CPU cluster for ETL + training. Scales to 0 when idle, so it costs nothing between runs.
+# System-assigned managed identity lets jobs read/write the data lake without keys.
+$schema: https://azuremlschemas.azureedge.net/latest/amlCompute.schema.json
+name: cpu-cluster
+type: amlcompute
+size: Standard_F4s_v2          # 4 vCPU / 8 GB, FSv2 family (quota 16 cores, keeps DSv2 free for endpoints)
+min_instances: 0
+max_instances: 2
+idle_time_before_scale_down: 600
+tier: dedicated
+identity:
+  type: system_assigned

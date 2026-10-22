@@ -1,0 +1,13 @@
+# Run the ETL pipeline every day at 01:00 Vietnam time. It always processes the latest ingest_date partition.
+$schema: https://azuremlschemas.azureedge.net/latest/schedule.schema.json
+name: banking77-etl-daily
+display_name: Banking77 ETL - daily
+trigger:
+  type: recurrence
+  frequency: day
+  interval: 1
+  schedule:
+    hours: [1]
+    minutes: [0]
+  time_zone: SE Asia Standard Time
+create_job: ../pipelines/etl_pipeline.yml

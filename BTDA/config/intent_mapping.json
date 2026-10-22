@@ -1,0 +1,68 @@
+{
+  "_description": "Map 77 Banking77 intents -> 5 business groups. Intents not listed fall into 'other'.",
+  "version": "v2",
+  "_changelog": {
+    "v1": "Initial grouping (2026-10-02)",
+    "v2": "Team review: card_swallowed -> card_block; top_up_reverted, Refund_not_showing_up, reverted_card_payment?, receiving_money, transfer_into_account -> balance_inquiry; beneficiary_not_allowed, unable_to_verify_identity, top_up_by_bank_transfer_charge, exchange_charge -> complaint"
+  },
+  "labels_vi": {
+    "complaint": "Khiếu nại",
+    "balance_inquiry": "Hỏi đáp số dư",
+    "card_block": "Yêu cầu khóa thẻ",
+    "fraud": "Gian lận",
+    "other": "Khác"
+  },
+  "mapping": {
+    "fraud": [
+      "card_payment_not_recognised",
+      "cash_withdrawal_not_recognised",
+      "direct_debit_payment_not_recognised",
+      "compromised_card"
+    ],
+    "card_block": [
+      "lost_or_stolen_card",
+      "lost_or_stolen_phone",
+      "pin_blocked",
+      "card_swallowed",
+      "terminate_account"
+    ],
+    "balance_inquiry": [
+      "balance_not_updated_after_bank_transfer",
+      "balance_not_updated_after_cheque_or_cash_deposit",
+      "top_up_reverted",
+      "Refund_not_showing_up",
+      "reverted_card_payment?",
+      "receiving_money",
+      "transfer_into_account",
+      "pending_top_up",
+      "pending_transfer",
+      "pending_card_payment",
+      "pending_cash_withdrawal"
+    ],
+    "complaint": [
+      "extra_charge_on_statement",
+      "card_payment_wrong_exchange_rate",
+      "wrong_exchange_rate_for_cash_withdrawal",
+      "wrong_amount_of_cash_received",
+      "card_payment_fee_charged",
+      "transfer_fee_charged",
+      "cash_withdrawal_charge",
+      "top_up_by_card_charge",
+      "transaction_charged_twice",
+      "request_refund",
+      "declined_card_payment",
+      "declined_transfer",
+      "beneficiary_not_allowed",
+      "unable_to_verify_identity",
+      "declined_cash_withdrawal",
+      "failed_transfer",
+      "top_up_failed",
+      "top_up_by_bank_transfer_charge",
+      "exchange_charge",
+      "card_not_working",
+      "contactless_not_working",
+      "virtual_card_not_working",
+      "transfer_not_received_by_recipient"
+    ]
+  }
+}

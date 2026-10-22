@@ -1,0 +1,23 @@
+# ETL step: raw zone -> data quality checks -> clean + label -> processed zone
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: banking77_data_prep
+display_name: Banking77 data prep (DQ + clean + label)
+version: 1
+type: command
+inputs:
+  raw_data:
+    type: uri_folder
+    description: Folder with train.csv/test.csv, or parent folder of ingest_date=* partitions
+  mapping:
+    type: uri_file
+    description: intent_mapping.json (77 intents -> 5 groups)
+outputs:
+  processed_data:
+    type: uri_folder
+code: ../../src
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+command: >-
+  python data_prep.py
+  --raw_dir ${{inputs.raw_data}}
+  --mapping ${{inputs.mapping}}
+  --out_dir ${{outputs.processed_data}}

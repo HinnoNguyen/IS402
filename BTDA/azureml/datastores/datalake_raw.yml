@@ -1,0 +1,7 @@
+# Datastore: links the ADLS Gen2 "raw" container into the Azure ML workspace (identity-based, no keys)
+$schema: https://azuremlschemas.azureedge.net/latest/azureDataLakeGen2.schema.json
+name: datalake_raw
+type: azure_data_lake_gen2
+description: Raw zone - original Banking77 files, never modified
+account_name: stcredit23520121
+filesystem: raw
