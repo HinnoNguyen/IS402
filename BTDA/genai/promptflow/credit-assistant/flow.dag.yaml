@@ -1,0 +1,60 @@
+$schema: https://azuremlschemas.azureedge.net/promptflow/latest/Flow.schema.json
+# Chat flow: safety_check -> lookup (Azure AI Search) -> chat_with_llm (Azure OpenAI)
+environment:
+  python_requirements_txt: requirements.txt
+inputs:
+  chat_history:
+    type: list
+    default: []
+    is_chat_history: true
+  question:
+    type: string
+    default: Phí rút tiền mặt bằng thẻ tín dụng là bao nhiêu?
+    is_chat_input: true
+outputs:
+  answer:
+    type: string
+    reference: ${chat_with_llm.output}
+    is_chat_output: true
+  context:
+    type: string
+    reference: ${lookup.output.context}
+  safety:
+    type: object
+    reference: ${safety_check.output}
+nodes:
+- name: safety_check
+  type: python
+  source:
+    type: code
+    path: safety_check.py
+  inputs:
+    content_safety_conn: content_safety_connection
+    aoai: aoai_connection
+    deployment_name: gpt-4.1-mini
+    question: ${inputs.question}
+- name: lookup
+  type: python
+  source:
+    type: code
+    path: lookup.py
+  inputs:
+    search: search_connection
+    question: ${inputs.question}
+    safety: ${safety_check.output}
+    index_name: credit-card-policy
+    top_k: 5
+- name: chat_with_llm
+  type: python
+  source:
+    type: code
+    path: chat_with_llm.py
+  inputs:
+    aoai: aoai_connection
+    deployment_name: gpt-4.1-mini
+    question: ${inputs.question}
+    contexts: ${lookup.output.context}
+    chat_history: ${inputs.chat_history}
+    safety: ${safety_check.output}
+    temperature: 0.2
+    max_tokens: 800

@@ -1,0 +1,18 @@
+{
+  "properties": {
+    "mode": "Default",
+    "basePolicyName": "Microsoft.DefaultV2",
+    "contentFilters": [
+      { "name": "Hate", "source": "Prompt", "enabled": true, "blocking": true, "severityThreshold": "Medium" },
+      { "name": "Sexual", "source": "Prompt", "enabled": true, "blocking": true, "severityThreshold": "Medium" },
+      { "name": "Violence", "source": "Prompt", "enabled": true, "blocking": true, "severityThreshold": "Medium" },
+      { "name": "Selfharm", "source": "Prompt", "enabled": true, "blocking": true, "severityThreshold": "Medium" },
+      { "name": "Jailbreak", "source": "Prompt", "enabled": true, "blocking": true },
+      { "name": "Hate", "source": "Completion", "enabled": true, "blocking": true, "severityThreshold": "Low" },
+      { "name": "Sexual", "source": "Completion", "enabled": true, "blocking": true, "severityThreshold": "Low" },
+      { "name": "Violence", "source": "Completion", "enabled": true, "blocking": true, "severityThreshold": "Low" },
+      { "name": "Selfharm", "source": "Completion", "enabled": true, "blocking": true, "severityThreshold": "Medium" },
+      { "name": "Protected Material Text", "source": "Completion", "enabled": true, "blocking": true }
+    ]
+  }
+}

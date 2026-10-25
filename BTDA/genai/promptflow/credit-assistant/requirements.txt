@@ -1,0 +1,3 @@
+openai>=1.40
+jinja2
+requests

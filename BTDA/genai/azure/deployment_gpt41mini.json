@@ -1,0 +1,8 @@
+{
+  "sku": { "name": "GlobalStandard", "capacity": 100 },
+  "properties": {
+    "model": { "format": "OpenAI", "name": "gpt-4.1-mini", "version": "2025-04-14" },
+    "raiPolicyName": "credit-assistant-guardrail",
+    "versionUpgradeOption": "OnceCurrentVersionExpired"
+  }
+}
