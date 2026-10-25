@@ -10,6 +10,7 @@
 | `src/train.py` | Train 3 model (LogReg, LinearSVC, XGBoost), log MLflow, quality gate F1 > 0.85 |
 | `src/intent_model.py` | Đóng gói model dạng MLflow pyfunc (trả về nhãn + độ tin cậy) |
 | `azureml/` | YAML cho Azure ML: datastore, compute cluster, component, pipeline ETL, schedule |
+| `genai/` | GenAIOps: tài liệu điều khoản thẻ (RAG), AI Search index, Prompt Flow chatbot, evaluation, Content Safety – xem [genai/README.md](genai/README.md) |
 
 ## Tài nguyên Azure (region `japaneast`)
 
@@ -21,6 +22,9 @@
 | Compute cluster | `cpu-cluster` (Standard_F4s_v2, 0–2 node) |
 | Datastore | `datalake_raw`, `datalake_processed` |
 | Data Asset | `azureml:banking77-processed:1` |
+| Azure AI Services (GenAI) | `ais-credit-assistant` – deployment `gpt-4.1-mini`, `text-embedding-3-small` |
+| Azure AI Search (Free) | `srch-credit-assistant` – index `credit-card-policy` |
+| Foundry hub / project | `hub-credit-assistant` / `proj-credit-assistant` – flow `credit-assistant-rag` |
 
 ## Chạy trên máy
 

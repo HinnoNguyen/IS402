@@ -6,3 +6,8 @@ outputs/
 data/processed/
 .env
 *.pyc
+
+# GenAI: Prompt Flow run artifacts, evaluation outputs (contain workspace URLs), Word lock files
+.promptflow/
+genai/eval/results/
+~$*.docx
