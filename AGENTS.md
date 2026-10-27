@@ -32,7 +32,7 @@ Repo môn **IS402 – Điện toán đám mây (UIT)**. Đồ án chính nằm �
   ```powershell
   claude mcp add azure --scope user -- cmd /c npx -y @azure/mcp@3.0.0 server start
   ```
-  Trên Windows cần `cmd /c`; ghim `3.0.0` vì `@latest` đang là bản beta. Kiểm tra: `claude mcp get azure` → `Connected`.
+  Trên Windows cần `cmd /c`; ghim `3.0.0` vì `@latest` đang là bản beta. Kiểm tra: `claude mcp get azure` → `Connected`.0.0000000000000000000000000000000000000000000
 
 ## Tài nguyên Azure
 
