@@ -9,4 +9,4 @@ environment:
   conda_file: conda.yaml
   image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
 instance_type: Standard_F2s_v2
-instance_count: 10
+instance_count: 1
