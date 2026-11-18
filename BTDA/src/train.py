@@ -65,8 +65,7 @@ def main():
     encoder = LabelEncoder().fit(train["label"])
     y_train, y_test = encoder.transform(train["label"]), encoder.transform(test["label"])
     labels = list(encoder.classes_)
-
-    mlflow.set_experiment(args.experiment)
+    #mlflow.set_experiment(args.experiment)
     results = {}
 
     for name, clf in candidate_models().items():
@@ -107,13 +106,14 @@ def main():
             example = pd.DataFrame({"text": test["text"].head(3).tolist()})
             wrapper = IntentClassifier()
             mlflow.pyfunc.log_model(
-                name="model",
+                artifact_path="model",
                 python_model=wrapper,
                 artifacts={"pipeline": str(model_dir / "pipeline.joblib"),
                            "labels": str(model_dir / "labels.json")},
                 code_paths=[str(Path(__file__).parent / "intent_model.py")],
                 input_example=example,
-                pip_requirements=["mlflow", "scikit-learn==1.9.1", "xgboost==3.4.1", "pandas", "joblib"],
+                pip_requirements=["mlflow==2.22.2", "scikit-learn==1.9.1",
+                                  "xgboost==3.4.1", "pandas", "joblib"],
             )
 
             results[name] = {**metrics, "run_id": run.info.run_id}

@@ -1,0 +1,106 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: banking77-mlops-4steps
+experiment_name: banking77-end-to-end
+compute: azureml:cpu-cluster
+
+inputs:
+  raw_data:
+    type: uri_folder
+    path: azureml://datastores/datalake_raw/paths/banking77/
+  mapping:
+    type: uri_file
+    path: ../../config/intent_mapping.json
+
+jobs:
+  # KHỐI 1: Tiền xử lý dữ liệu
+  data_prep:
+    type: command
+    component: ../components/data_prep.yml
+    inputs:
+      raw_data: ${{parent.inputs.raw_data}}
+      mapping: ${{parent.inputs.mapping}}
+
+  # KHỐI 2: Huấn luyện mô hình
+  train:
+    type: command
+    code: ../../
+    environment:
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+      conda_file:
+        name: custom-env
+        channels:
+          - conda-forge
+        dependencies:
+          - python=3.10
+          - pip
+          - pip:
+            - scikit-learn
+            - xgboost
+            - azureml-mlflow
+            - mlflow==2.22.2
+            - pandas
+            - numpy
+            - joblib
+    command: >-
+      python src/train.py 
+      --data_dir ${{inputs.processed_data}}
+      --out_dir ${{outputs.model_output}}
+      --mapping ${{inputs.mapping}}
+    inputs:
+      processed_data: ${{parent.jobs.data_prep.outputs.processed_data}}
+      mapping: ${{parent.inputs.mapping}}
+    outputs:
+      model_output:
+        type: uri_folder
+
+  # KHỐI 3: Đánh giá chất lượng (Quality Gate)
+  quality_gate:
+    type: command
+    code: ../../
+    environment:
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+      conda_file:
+        name: custom-env
+        channels:
+          - conda-forge
+        dependencies:
+          - python=3.10
+          - pip
+          - pip:
+            - scikit-learn
+            - pandas
+            - joblib
+    command: >-
+      python src/evaluate.py 
+      --model_dir ${{inputs.model_dir}} 
+      --data_dir ${{inputs.data_dir}} 
+      --eval_output ${{outputs.eval_output}}
+    inputs:
+      # Lấy model từ khối train và data từ khối data_prep
+      model_dir: ${{parent.jobs.train.outputs.model_output}}
+      data_dir: ${{parent.jobs.data_prep.outputs.processed_data}}
+    outputs:
+      eval_output:
+        type: uri_folder
+
+  # KHỐI 4: Đăng ký mô hình
+  register:
+    type: command
+    code: ../../
+    environment:
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+      conda_file:
+        name: custom-env
+        channels:
+          - conda-forge
+        dependencies:
+          - python=3.10
+    command: >-
+      python src/register.py 
+      --model_dir ${{inputs.model_dir}} 
+      --eval_result ${{inputs.eval_result}}
+    inputs:
+      # Lấy model từ khối train và file log xác nhận pass F1 từ khối quality_gate
+      model_dir: ${{parent.jobs.train.outputs.model_output}}
+      eval_result: ${{parent.jobs.quality_gate.outputs.eval_output}}

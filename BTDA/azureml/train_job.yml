@@ -1,0 +1,43 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+
+# Đặt tên job cho dễ theo dõi trên bảng điều khiển
+display_name: train-banking-intent-model
+experiment_name: banking-intent-classification
+
+# Lệnh để chạy file train.py tương tự như local, nhưng trỏ data vào Cloud Asset
+command: >
+  python src/train.py 
+  --data_dir ${{inputs.processed_data}}
+  --out_dir outputs
+  --mapping config/intent_mapping.json
+
+# Mã nguồn cần tải lên Azure (nằm ở thư mục gốc của project)
+code: ../
+
+# Nguồn dữ liệu đầu vào đã được làm sạch trên Cloud
+inputs:
+  processed_data:
+    type: uri_folder
+    path: azureml:banking77-processed:1
+
+# Chỉ định môi trường ảo trên Cloud (Azure đã cài sẵn scikit-learn, xgboost)
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+  conda_file:
+    name: custom-env
+    channels:
+      - conda-forge
+    dependencies:
+      - python=3.10
+      - pip
+      - pip:
+        - scikit-learn
+        - xgboost
+        - azureml-mlflow
+        - mlflow==2.22.2
+        - pandas
+        - numpy
+
+# Yêu cầu máy chủ nào chạy job này
+compute: azureml:cpu-cluster
