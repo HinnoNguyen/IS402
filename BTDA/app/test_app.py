@@ -1,0 +1,77 @@
+"""Test backend web demo (chạy offline, không cần Azure):  pytest -q   (trong BTDA/app)"""
+import os
+
+os.environ["MOCK_MODE"] = "true"  # không bao giờ gọi Azure thật trong test
+
+import pytest  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+import main  # noqa: E402
+
+client = TestClient(main.app)
+
+
+def test_index_and_health():
+    assert client.get("/").status_code == 200
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/api/health").json() == {"status": "ok", "classifier": "mock", "chat": "mock"}
+
+
+def test_classify_mock():
+    texts = ["I lost my card, please block it", "Someone used my card without permission", "hello"]
+    res = client.post("/api/classify", json={"texts": texts}).json()
+    assert res["mode"] == "mock"
+    assert [p["label"] for p in res["predictions"]] == ["card_block", "fraud", "other"]
+    assert all(p["label_vi"] == main.LABELS_VI[p["label"]] for p in res["predictions"])
+
+
+@pytest.mark.parametrize("body", [{"texts": []}, {"texts": ["  "]}, {"texts": ["x" * 1001]}, {}])
+def test_classify_rejects_bad_input(body):
+    assert client.post("/api/classify", json=body).status_code == 422
+
+
+def test_chat_mock_answer_and_block():
+    ok = client.post("/api/chat", json={"question": "Phí rút tiền mặt là bao nhiêu?"}).json()
+    assert not ok["blocked"] and ok["sources"][0]["id"] == 1
+    bad = client.post("/api/chat", json={"question": "Nợ nhiều quá tôi muốn tự tử"}).json()
+    assert bad["blocked"] and bad["sources"] == []
+
+
+def test_normalize_live_classifier_response():
+    raw = {"predictions": [{"label": "fraud", "confidence": 0.91}]}
+    assert main._normalize_predictions(["x"], raw) == [
+        {"text": "x", "label": "fraud", "label_vi": "Gian lận", "confidence": 0.91}]
+    with pytest.raises(HTTPException):
+        main._normalize_predictions(["x"], {"error": "Input must contain a 'text' column"})
+    with pytest.raises(HTTPException):
+        main._normalize_predictions(["x", "y"], raw)
+
+
+def test_parse_sources_matches_lookup_format():
+    # cùng định dạng với genai/promptflow/credit-assistant/lookup.py
+    context = "[Nguồn 1: dieu-khoan.pdf]\nĐiều 6.5 Phí rút tiền mặt...\n\n[Nguồn 2: dieu-khoan.pdf]\nĐiều 8.3 ..."
+    sources = main.parse_sources(context)
+    assert [s["id"] for s in sources] == [1, 2]
+    assert sources[0]["excerpt"] == "Điều 6.5 Phí rút tiền mặt..."
+    assert main.parse_sources("") == []
+
+
+def test_flow_history_format():
+    turns = [main.Turn(question="q1", answer="a1")]
+    assert main.to_flow_history(turns) == [{"inputs": {"question": "q1"}, "outputs": {"answer": "a1"}}]
+
+
+def test_live_chat_uses_endpoint(monkeypatch):
+    captured = {}
+
+    async def fake_call(ep, payload):
+        captured.update(payload)
+        return {"answer": "Theo Điều 6.5 ...", "context": "[Nguồn 1: t]\nc", "safety": {"safe": True}}
+
+    monkeypatch.setattr(main, "CHAT", main.Endpoint("chat", "https://example.invalid/score", "k", ""))
+    monkeypatch.setattr(main.Endpoint, "live", property(lambda self: bool(self.url)))
+    monkeypatch.setattr(main, "call_endpoint", fake_call)
+    res = client.post("/api/chat", json={"question": "Q2", "chat_history": [{"question": "Q1", "answer": "A1"}]})
+    assert res.json()["mode"] == "live" and res.json()["sources"] == [{"id": 1, "title": "t", "excerpt": "c"}]
+    assert captured == {"question": "Q2", "chat_history": [{"inputs": {"question": "Q1"}, "outputs": {"answer": "A1"}}]}

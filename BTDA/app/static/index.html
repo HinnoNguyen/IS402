@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trợ lý tín dụng MayXanh</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">MX</span>
+      <div>
+        <h1>Trợ lý tín dụng MayXanh</h1>
+        <p class="subtitle">Demo IS402 – Phân loại ý định &amp; Chatbot điều khoản thẻ tín dụng trên Azure</p>
+      </div>
+    </div>
+    <div class="status" id="status" aria-live="polite"></div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true" data-tab="classify">Phân loại ý định</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="chat">Trợ lý tín dụng (Chat)</button>
+  </nav>
+
+  <main>
+    <!-- Trang phân loại: gọi /api/classify -> endpoint credit-intent-endpoint -->
+    <section id="tab-classify" class="panel" role="tabpanel">
+      <div class="card">
+        <h2>Phân loại tin nhắn khách hàng</h2>
+        <p class="hint">Model được huấn luyện trên bộ Banking77 (tiếng Anh) và gom vào 5 nhóm nghiệp vụ.
+          Nhập mỗi câu trên một dòng (tối đa 20 câu).</p>
+        <form id="classify-form">
+          <textarea id="classify-input" rows="4" placeholder="I lost my card, please block it"></textarea>
+          <div class="samples" id="classify-samples"></div>
+          <div class="actions">
+            <button type="submit" class="primary" id="classify-btn">Phân loại</button>
+          </div>
+        </form>
+      </div>
+      <div class="card" id="classify-result" hidden>
+        <div class="result-head">
+          <h2>Kết quả</h2>
+          <span class="meta" id="classify-meta"></span>
+        </div>
+        <ul class="predictions" id="predictions"></ul>
+      </div>
+    </section>
+
+    <!-- Trang chat: gọi /api/chat -> endpoint credit-assistant-chat (Prompt Flow RAG) -->
+    <section id="tab-chat" class="panel" role="tabpanel" hidden>
+      <div class="card chat-card">
+        <div class="result-head">
+          <h2>Hỏi đáp Điều khoản sử dụng thẻ tín dụng</h2>
+          <button type="button" class="ghost" id="chat-reset">Cuộc hội thoại mới</button>
+        </div>
+        <div class="messages" id="messages" aria-live="polite">
+          <div class="msg bot">
+            <div class="bubble">Xin chào! Tôi trả lời các câu hỏi về Điều khoản và Điều kiện sử dụng thẻ tín dụng của Ngân hàng MayXanh, có trích dẫn điều khoản. Bạn cần hỗ trợ gì?</div>
+          </div>
+        </div>
+        <div class="samples" id="chat-samples"></div>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" type="text" maxlength="2000" autocomplete="off"
+                 placeholder="Ví dụ: Phí rút tiền mặt bằng thẻ tín dụng là bao nhiêu?">
+          <button type="submit" class="primary" id="chat-btn">Gửi</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">Ngân hàng MayXanh là ngân hàng giả định dùng cho đồ án. Không nhập thông tin thẻ thật.</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

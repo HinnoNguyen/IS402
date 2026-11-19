@@ -11,6 +11,8 @@
 | `src/intent_model.py` | Đóng gói model dạng MLflow pyfunc (trả về nhãn + độ tin cậy) |
 | `azureml/` | YAML cho Azure ML: datastore, compute cluster, component, pipeline ETL, schedule |
 | `genai/` | GenAIOps: tài liệu điều khoản thẻ (RAG), AI Search index, Prompt Flow chatbot, evaluation, Content Safety – xem [genai/README.md](genai/README.md) |
+| `app/` | Web demo (FastAPI + HTML/JS): trang phân loại và trang chat gọi 2 endpoint, script đo độ trễ theo region – xem [app/README.md](app/README.md) |
+| `../.github/workflows/` | CI/CD bằng GitHub Actions: `ci.yml` (train + quality gate, test web), `cd.yml` (train trên Azure ML → đăng ký model → deploy blue/green) – xem mục CI/CD bên dưới |
 
 ## Tài nguyên Azure (region `japaneast`)
 
@@ -45,3 +47,37 @@ az ml job create --file azureml/pipelines/etl_pipeline.yml --resource-group rg-c
 ```
 
 Pipeline đọc partition `ingest_date` mới nhất trong `raw/banking77/`, ghi kết quả vào `processed/banking77/<job-id>/`.
+
+## CI/CD – GitHub Actions (T45)
+
+| Workflow | Khi nào chạy | Làm gì | Cần Azure? |
+|---|---|---|---|
+| `ci.yml` | Mọi Pull Request và push vào `main` có thay đổi trong `BTDA/` | Chạy `data_prep.py` → `train.py` (3 model), **fail nếu F1 macro ≤ 0.85**, tóm tắt metrics, lưu confusion matrix làm artifact; test backend web | Không |
+| `cd.yml` | Push vào `main` có thay đổi `src/`, `config/`, `azureml/pipelines\|components\|deployment/`, hoặc bấm **Run workflow** | Chạy `azureml/pipelines/mlops_pipeline.yml` → đăng ký model tốt nhất (`credit-intent-model`, tag F1/run_id/git_sha) → deploy vào deployment đang rảnh (blue↔green) → smoke test → traffic 10% → 100% → xóa deployment cũ. Lỗi thì tự rollback | Có |
+
+**Tiết kiệm credit:** ở chế độ `auto` (mặc định), `cd.yml` chỉ deploy khi endpoint đang có deployment nhận traffic, tức là nhóm đang bật endpoint để demo. Nếu endpoint đang tắt, workflow chỉ train và đăng ký model. Muốn deploy dù endpoint đang tắt: Actions → *CD – train & deploy intent model* → Run workflow → `deploy = force`.
+
+**Cài đặt đăng nhập Azure (làm 1 lần):** workflow dùng OIDC với user-assigned managed identity, nên không phải lưu mật khẩu hay key trong GitHub. Chưa cài thì `cd.yml` tự bỏ qua, không báo lỗi.
+
+1. Thành viên có quyền Contributor tạo identity và federated credential cho nhánh `main`:
+
+   ```powershell
+   az identity create -n id-github-cicd -g rg-credit-assistant -l japaneast
+   az identity federated-credential create --identity-name id-github-cicd -g rg-credit-assistant -n github-main `
+       --issuer https://token.actions.githubusercontent.com `
+       --subject repo:HinnoNguyen/IS402:ref:refs/heads/main --audiences api://AzureADTokenExchange
+   ```
+
+2. **Bảo (Owner)** gán quyền cho identity. Contributor không gán role được:
+
+   ```powershell
+   $principal = az identity show -n id-github-cicd -g rg-credit-assistant --query principalId -o tsv
+   $ws = az ml workspace show -n mlw-credit-assistant -g rg-credit-assistant --query id -o tsv
+   $st = az storage account show -n stcredit23520121 -g rg-credit-assistant --query id -o tsv
+   az role assignment create --assignee-object-id $principal --assignee-principal-type ServicePrincipal --role "AzureML Data Scientist" --scope $ws
+   az role assignment create --assignee-object-id $principal --assignee-principal-type ServicePrincipal --role "Storage Blob Data Reader" --scope $st
+   ```
+
+   `AzureML Data Scientist` cho phép chạy job, đăng ký model và quản lý online endpoint, nhưng không cho tạo hay xóa compute. `Storage Blob Data Reader` cần vì datastore `datalake_raw` dùng identity-based access.
+
+3. Chủ repo vào GitHub → Settings → Secrets and variables → Actions, tạo 3 **secret**: `AZURE_CLIENT_ID` (lấy bằng `az identity show -n id-github-cicd -g rg-credit-assistant --query clientId -o tsv`), `AZURE_TENANT_ID` và `AZURE_SUBSCRIPTION_ID` (lấy bằng `az account show --query "{tenant:tenantId, sub:id}"`). Phải để ở dạng *secret*, không để ở dạng *variable*, vì repo public: secret được che thành `***` trong log.

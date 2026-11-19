@@ -1,0 +1,99 @@
+# T45 – CI: chạy ở mọi Pull Request / push vào main có đụng tới BTDA. Không cần Azure, không cần secret.
+#  - train-quality-gate: chạy lại DataOps + MLOps local (data_prep -> train 3 model), fail nếu F1 macro <= 0.85
+#  - web-app: test backend web demo (chế độ MOCK)
+name: CI
+
+on:
+  pull_request:
+    paths: ["BTDA/**", ".github/workflows/**"]
+  push:
+    branches: [main]
+    paths: ["BTDA/**", ".github/workflows/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  train-quality-gate:
+    name: Train + quality gate (F1 > 0.85)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: BTDA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: BTDA/requirements.txt
+
+      - name: Cài thư viện
+        run: pip install -r requirements.txt
+
+      - name: DataOps – làm sạch & gán nhãn (data_prep.py)
+        run: python src/data_prep.py
+
+      - name: MLOps – train 3 model + quality gate (train.py)
+        run: python src/train.py   # tự exit lỗi nếu F1 macro không vượt ngưỡng 0.85
+
+      - name: Tóm tắt kết quả
+        if: always()
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          p = pathlib.Path("outputs/best_model.json")
+          if not p.exists():
+              print("### Train thất bại – không có outputs/best_model.json"); raise SystemExit
+          s = json.loads(p.read_text())
+          gate = "✅ ĐẠT" if s["quality_gate_passed"] else "❌ KHÔNG ĐẠT"
+          print(f"### Quality gate {gate}\n")
+          print("| Model tốt nhất | Accuracy | F1 macro | F1 weighted | Ngưỡng | Mapping |")
+          print("|---|---|---|---|---|---|")
+          print(f"| {s['best_model']} | {s['accuracy']:.4f} | {s['f1_macro']:.4f} | {s['f1_weighted']:.4f} "
+                f"| {s['f1_threshold']} | {s['mapping_version']} |")
+          EOF
+
+      - name: Lưu kết quả train (confusion matrix, best_model.json)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: train-outputs
+          path: |
+            BTDA/outputs/*.json
+            BTDA/outputs/*.png
+            BTDA/data/processed/quality_report.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  web-app:
+    name: Web demo – test backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: BTDA/app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: BTDA/app/requirements.txt
+
+      - name: Cài thư viện
+        run: pip install -r requirements.txt pytest
+
+      - name: Test (MOCK, không gọi Azure)
+        run: pytest -q
+
+      - name: Kiểm tra cú pháp script đo độ trễ (T44)
+        run: python -m py_compile latency_test.py

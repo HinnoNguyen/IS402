@@ -1,0 +1,221 @@
+# T45 – CD: push code model lên main -> train lại trên Azure ML -> đăng ký model -> deploy blue/green.
+#
+# Đăng nhập Azure bằng OIDC (không lưu mật khẩu/key): managed identity `id-github-cicd` có federated
+# credential tin GitHub Actions của repo này. Cài đặt 1 lần – xem mục "CI/CD" trong BTDA/README.md.
+# Chưa khai báo 3 secret AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID thì workflow tự bỏ qua.
+#
+# Tiết kiệm credit: online endpoint tính tiền theo giờ VM. Ở chế độ `auto` (mặc định, cũng là chế độ khi push),
+# workflow CHỈ deploy khi endpoint đang có deployment nhận traffic (tức nhóm đang bật để demo);
+# endpoint đang tắt thì chỉ train + đăng ký model. Muốn bật hẳn: Run workflow với deploy = force.
+name: CD – train & deploy intent model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "BTDA/src/**"
+      - "BTDA/config/**"
+      - "BTDA/azureml/pipelines/**"
+      - "BTDA/azureml/components/**"
+      - "BTDA/azureml/deployment/**"
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "auto = chỉ deploy khi endpoint đang chạy; force = luôn deploy; skip = chỉ train + đăng ký"
+        type: choice
+        options: [auto, force, skip]
+        default: auto
+      keep_old:
+        description: "Giữ deployment cũ (0% traffic) để rollback – tốn thêm 1 VM"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write   # OIDC
+  contents: read
+
+concurrency:
+  group: cd-intent-model
+  cancel-in-progress: false
+
+env:
+  RG: rg-credit-assistant
+  WS: mlw-credit-assistant
+  ENDPOINT: credit-intent-endpoint
+  MODEL: credit-intent-model
+
+jobs:
+  check:
+    name: Kiểm tra cấu hình Azure
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.c.outputs.configured }}
+    steps:
+      - id: c
+        env:
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -n "$CLIENT_ID" ]; then echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Chưa cấu hình secret Azure (AZURE_CLIENT_ID...) – bỏ qua CD. Xem BTDA/README.md mục CI/CD."
+          fi
+
+  train-register:
+    name: Train trên Azure ML + đăng ký model
+    needs: check
+    if: needs.check.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      version: ${{ steps.register.outputs.version }}
+    defaults:
+      run:
+        working-directory: BTDA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Cài extension ml
+        run: az extension add -n ml --only-show-errors
+
+      - name: Chạy pipeline data_prep -> train -> quality_gate -> register
+        id: pipeline
+        run: |
+          JOB=$(az ml job create -f azureml/pipelines/mlops_pipeline.yml -g "$RG" -w "$WS" \
+                --set display_name="cicd-${GITHUB_SHA::7}" --query name -o tsv --only-show-errors)
+          echo "job=$JOB" >> "$GITHUB_OUTPUT"
+          echo "Pipeline job: $JOB"
+          az ml job stream -n "$JOB" -g "$RG" -w "$WS" --only-show-errors || true
+          STATUS=$(az ml job show -n "$JOB" -g "$RG" -w "$WS" --query status -o tsv --only-show-errors)
+          echo "Trạng thái: $STATUS"
+          [ "$STATUS" = "Completed" ] || { echo "::error::Pipeline $JOB kết thúc với trạng thái $STATUS (quality gate hoặc bước khác lỗi)"; exit 1; }
+
+      - name: Đăng ký model tốt nhất vào Model Registry
+        id: register
+        env:
+          JOB: ${{ steps.pipeline.outputs.job }}
+        run: |
+          TRAIN_JOB=$(az ml job list --parent-job-name "$JOB" -g "$RG" -w "$WS" \
+                      --query "[?display_name=='train'].name | [0]" -o tsv --only-show-errors)
+          az ml job download -n "$TRAIN_JOB" --output-name model_output --download-path dl -g "$RG" -w "$WS" --only-show-errors
+          BEST=$(find dl -name best_model.json | head -1)
+          RUN_ID=$(jq -r .run_id "$BEST"); F1=$(jq -r '.f1_macro * 10000 | round / 10000' "$BEST"); NAME=$(jq -r .best_model "$BEST")
+          echo "Model tốt nhất: $NAME, F1 macro = $F1, MLflow run = $RUN_ID"
+          VERSION=$(az ml model create -n "$MODEL" --type mlflow_model -g "$RG" -w "$WS" \
+                    --path "azureml://datastores/workspaceartifactstore/paths/ExperimentRun/dcid.$RUN_ID/model" \
+                    --tags F1="$F1" run_id="$RUN_ID" algorithm="$NAME" pipeline_job="$JOB" git_sha="$GITHUB_SHA" \
+                    --query version -o tsv --only-show-errors)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Model đã đăng ký: \`$MODEL:$VERSION\`"
+            echo "| Thuật toán | F1 macro | Pipeline job |"; echo "|---|---|---|"
+            echo "| $NAME | $F1 | $JOB |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy blue/green
+    needs: train-register
+    if: github.event_name == 'push' || inputs.deploy != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: BTDA
+    env:
+      VERSION: ${{ needs.train-register.outputs.version }}
+      MODE: ${{ inputs.deploy || 'auto' }}
+      KEEP_OLD: ${{ inputs.keep_old || false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Cài extension ml
+        run: az extension add -n ml --only-show-errors
+
+      - name: Xác định deployment đang chạy và deployment đích
+        id: plan
+        run: |
+          TRAFFIC=$(az ml online-endpoint show -n "$ENDPOINT" -g "$RG" -w "$WS" --query traffic -o json --only-show-errors || echo '{}')
+          LIVE=$(echo "$TRAFFIC" | jq -r 'to_entries | map(select(.value > 0)) | sort_by(-.value) | .[0].key // empty')
+          if [ -z "$LIVE" ] && [ "$MODE" != "force" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Endpoint $ENDPOINT không có deployment nhận traffic – bỏ qua deploy để không tốn phí VM. Model $MODEL:$VERSION đã sẵn sàng; chạy lại workflow với deploy=force khi cần."
+            exit 0
+          fi
+          if [ "$LIVE" = "blue" ]; then TARGET=green; else TARGET=blue; fi
+          FILE=azureml/deployment/deployment.yml; [ "$TARGET" = "green" ] && FILE=azureml/deployment/deployment_green.yml
+          echo "Đang chạy: ${LIVE:-không có} -> deploy model mới vào: $TARGET"
+          { echo "skip=false"; echo "live=$LIVE"; echo "target=$TARGET"; echo "file=$FILE"; } >> "$GITHUB_OUTPUT"
+
+      - name: Tạo endpoint nếu chưa có
+        if: steps.plan.outputs.skip == 'false'
+        run: |
+          az ml online-endpoint show -n "$ENDPOINT" -g "$RG" -w "$WS" -o none --only-show-errors 2>/dev/null \
+            || az ml online-endpoint create -f azureml/deployment/endpoint.yml -g "$RG" -w "$WS" -o none --only-show-errors
+
+      - name: Deploy model mới vào deployment đích (0% traffic)
+        if: steps.plan.outputs.skip == 'false'
+        env:
+          TARGET: ${{ steps.plan.outputs.target }}
+          FILE: ${{ steps.plan.outputs.file }}
+        run: |
+          if az ml online-deployment show -n "$TARGET" -e "$ENDPOINT" -g "$RG" -w "$WS" -o none --only-show-errors 2>/dev/null; then
+            az ml online-deployment update -f "$FILE" -g "$RG" -w "$WS" --set model="azureml:$MODEL:$VERSION" -o none --only-show-errors
+          else
+            az ml online-deployment create -f "$FILE" -g "$RG" -w "$WS" --set model="azureml:$MODEL:$VERSION" -o none --only-show-errors
+          fi
+
+      - name: Smoke test deployment mới
+        if: steps.plan.outputs.skip == 'false'
+        env:
+          TARGET: ${{ steps.plan.outputs.target }}
+        run: |
+          OUT=$(az ml online-endpoint invoke -n "$ENDPOINT" --deployment-name "$TARGET" -g "$RG" -w "$WS" \
+                --request-file azureml/deployment/sample_request.json --only-show-errors)
+          echo "$OUT"
+          echo "$OUT" | jq -e '(if type == "string" then fromjson else . end) | .predictions | length == 4' > /dev/null \
+            || { echo "::error::Deployment $TARGET trả kết quả không hợp lệ"; exit 1; }
+
+      - name: Chuyển traffic (canary 10% -> 100%)
+        if: steps.plan.outputs.skip == 'false'
+        env:
+          LIVE: ${{ steps.plan.outputs.live }}
+          TARGET: ${{ steps.plan.outputs.target }}
+        run: |
+          if [ -n "$LIVE" ]; then
+            az ml online-endpoint update -n "$ENDPOINT" -g "$RG" -w "$WS" --traffic "$LIVE=90 $TARGET=10" -o none --only-show-errors
+            for i in 1 2 3 4 5; do
+              az ml online-endpoint invoke -n "$ENDPOINT" -g "$RG" -w "$WS" --request-file azureml/deployment/sample_request.json \
+                --only-show-errors | jq -e '(if type == "string" then fromjson else . end) | .predictions' > /dev/null
+            done
+            az ml online-endpoint update -n "$ENDPOINT" -g "$RG" -w "$WS" --traffic "$LIVE=0 $TARGET=100" -o none --only-show-errors
+          else
+            az ml online-endpoint update -n "$ENDPOINT" -g "$RG" -w "$WS" --traffic "$TARGET=100" -o none --only-show-errors
+          fi
+          echo "### Deploy xong: \`$TARGET\` = 100% traffic, model \`$MODEL:$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rollback nếu lỗi
+        if: failure() && steps.plan.outputs.live != ''
+        env:
+          LIVE: ${{ steps.plan.outputs.live }}
+          TARGET: ${{ steps.plan.outputs.target }}
+        run: |
+          echo "::warning::Deploy lỗi – trả 100% traffic về $LIVE"
+          az ml online-endpoint update -n "$ENDPOINT" -g "$RG" -w "$WS" --traffic "$LIVE=100 $TARGET=0" -o none --only-show-errors
+
+      - name: Xóa deployment cũ (tiết kiệm credit)
+        if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.live != '' && env.KEEP_OLD != 'true'
+        env:
+          LIVE: ${{ steps.plan.outputs.live }}
+        run: az ml online-deployment delete -n "$LIVE" -e "$ENDPOINT" -g "$RG" -w "$WS" --yes --no-wait --only-show-errors
