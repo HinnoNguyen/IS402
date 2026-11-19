@@ -152,10 +152,11 @@ Câu có ý định tự hại không nhận câu từ chối chung mà nhận p
 
 ## 9. Triển khai (T34) – kế hoạch
 
-Flow sẽ được deploy thành **Managed Online Endpoint** `credit-assistant-chat` (VM Standard_DS3_v2 × 1, xác thực bằng key) để web demo (T37) gọi tới. Hai điểm cần lưu ý:
+Flow sẽ được deploy thành **Managed Online Endpoint** `credit-assistant-chat` (VM `Standard_DS2_v2` × 1, xác thực bằng key) để web demo (T37) gọi tới. Ba điểm cần lưu ý:
 
-- **Chi phí theo giờ:** 0,409 USD/giờ, khoảng 9,8 USD/ngày (giá Linux, japaneast, 10/2026). Endpoint chỉ bật trong thời gian demo, xóa ngay sau đó.
-- **Phân quyền:** identity của endpoint cần role "AzureML Data Scientist" và "Azure Machine Learning Workspace Connection Secrets Reader" trên project. Thành viên có role Contributor không tự gán được, nên Owner (Bảo) thực hiện.
+- **Quota:** với mỗi deployment, Azure giữ thêm 20% quota cho các thao tác hệ thống (nâng cấp hệ điều hành, khôi phục VM). Vì vậy một instance `Standard_DS3_v2` (4 vCPU) cần 8 vCPU họ DSv2, vượt quota 6 vCPU của gói Azure for Students. Nhóm chọn `Standard_DS2_v2` (2 vCPU, 7 GB RAM, cần 4 vCPU quota), đủ cho một flow chỉ gọi API.
+- **Chi phí theo giờ:** 0,205 USD/giờ, khoảng 4,9 USD/ngày (giá Linux, japaneast, 11/2026), tính cả khi không có request. Endpoint chỉ chạy khi kiểm thử và demo; ngoài thời gian đó nhóm xóa deployment (endpoint không còn deployment thì không tốn tiền, URL và key giữ nguyên).
+- **Phân quyền:** endpoint dùng identity System-assigned. Hệ thống tự gán quyền kéo image (AcrPull) và đọc model (Storage Blob Data Reader); nhờ tùy chọn *Enforce access to connection secrets*, quyền đọc connection (Azure Machine Learning Workspace Connection Secrets Reader) cũng được gán tự động, nên dự kiến thành viên có role Contributor tự triển khai được. Nếu bước tự gán không thành công, Owner (Bảo) gán thủ công.
 
 ## 10. Danh sách ảnh cho báo cáo
 

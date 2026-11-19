@@ -32,7 +32,7 @@ Repo môn **IS402 – Điện toán đám mây (UIT)**. Đồ án chính nằm �
   ```powershell
   claude mcp add azure --scope user -- cmd /c npx -y @azure/mcp@3.0.0 server start
   ```
-  Trên Windows cần `cmd /c`; ghim `3.0.0` vì `@latest` đang là bản beta. Kiểm tra: `claude mcp get azure` → `Connected`.0.0000000000000000000000000000000000000000000
+  Trên Windows cần `cmd /c`; ghim `3.0.0` vì `@latest` đang là bản beta. Kiểm tra: `claude mcp get azure` → `Connected`.
 
 ## Tài nguyên Azure
 
@@ -46,7 +46,7 @@ Repo môn **IS402 – Điện toán đám mây (UIT)**. Đồ án chính nằm �
 
 Chi tiết từng phần: [BTDA/README.md](BTDA/README.md) (DataOps/MLOps) và [BTDA/genai/README.md](BTDA/genai/README.md) (GenAIOps, runbook đầy đủ).
 
-## Trạng thái phần GenAI (cập nhật 2026-10-25)
+## Trạng thái phần GenAI (cập nhật 2026-11-19)
 
 | Task | Trạng thái | Kết quả |
 |---|---|---|
@@ -58,8 +58,8 @@ Chi tiết từng phần: [BTDA/README.md](BTDA/README.md) (DataOps/MLOps) và [
 | T29 | Xong | Flow `safety_check → lookup → chat_with_llm`, đã lên project Foundry |
 | T30 | Xong | `eval/eval_data.jsonl` (35 câu) |
 | T31 | Xong | Groundedness > 4 (quality gate đạt), xem `BTDA/genai/docs/chuong-genaiops.md` |
-| T42 | Xong (làm trong flow) | 3 lớp: Content Safety + Prompt Shields, LLM guard, guardrail của deployment |
-| T34 | **Chưa làm** | Cần Bảo gán role cho identity của online endpoint; endpoint tính phí theo giờ → chỉ bật gần ngày demo |
+| T42 | Đã làm trong flow, chờ T34 | 3 lớp: Content Safety + Prompt Shields, LLM guard, guardrail của deployment; còn kiểm thử qua endpoint + chụp ảnh |
+| T34 | **Đang làm** | Endpoint `credit-assistant-chat` (`Standard_DS2_v2` × 1, identity System-assigned); đang chặn T35, T37, T42, T46 → bật trong buổi hẹn với nhóm, xong xóa deployment (giữ endpoint). Runbook: `BTDA/genai/README.md` |
 | T49 | Bản nháp | `BTDA/genai/docs/chuong-genaiops.md` |
 
 ## Lưu ý kỹ thuật
@@ -68,4 +68,5 @@ Chi tiết từng phần: [BTDA/README.md](BTDA/README.md) (DataOps/MLOps) và [
 - **Prompt Flow** chỉ chạy với hub-based project / Azure ML workspace, bị khai tử 20/04/2027.
 - `az ml workspace create --kind project` (extension `ml` 2.45.2) lỗi → tạo project bằng ARM REST. `promptflow-azure 1.18.5` cần `azure-ai-ml==1.28.1`.
 - Role của managed identity mới tạo cần ~10–30 phút để có hiệu lực (lỗi 401 khi `pfazure flow create`).
-- Chi phí: AI Search Free, model trả theo token; **online endpoint (T32/T34) tính theo giờ VM** – tạo gần ngày demo và xóa sau demo (T51). Budget alert do Hương quản lý (T15).
+- **Quota VM `japaneast`:** họ DSv2 6 vCPU, FSv2 16, tổng 20. Online endpoint giữ thêm 20% → cần `ceil(1,2 × số instance) × số vCPU`; ví dụ `Standard_DS3_v2` × 1 cần 8 > 6 → dùng `Standard_DS2_v2`. Xem: `az ml compute list-usage -g rg-credit-assistant -w mlw-credit-assistant -o table`.
+- Chi phí: AI Search Free, model trả theo token; **online endpoint (T32/T34) tính theo giờ VM của deployment** – chỉ bật khi cần, xong thì xóa deployment (endpoint rỗng không tốn tiền), xóa hẳn ở T51. Budget alert do Hương quản lý (T15).
