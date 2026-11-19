@@ -67,22 +67,60 @@ az rest --method put --url "$acct/raiPolicies/credit-assistant-guardrail?api-ver
 az rest --method put --url "$acct/deployments/gpt-4.1-mini?api-version=2024-10-01" --body "@azure/deployment_gpt41mini.json"
 ```
 
-## T34 – Deploy flow thành Managed Online Endpoint (chưa làm, làm gần ngày demo)
+## T34 – Deploy flow thành Managed Online Endpoint (đang làm)
 
-Endpoint tính tiền theo giờ VM, kể cả khi không có request. Giá Linux tại `japaneast` (10/2026): **Standard_DS3_v2 ≈ 0,409 USD/giờ (~9,8 USD/ngày)**, Standard_DS2_v2 ≈ 0,205 USD/giờ (~4,9 USD/ngày). Với credit 100 USD dùng chung, chỉ bật endpoint trong buổi demo rồi xóa (T51).
+Endpoint dùng chung cho T35 (Data Collector), T37 (web gọi API), T42 và T46 → bật trong **một buổi hẹn với nhóm** để mọi người làm và chụp ảnh cùng lúc, xong thì xóa deployment (bước 5).
 
-1. Foundry (classic) → `proj-credit-assistant` → Prompt flow → `credit-assistant-rag` → **Deploy**: endpoint `credit-assistant-chat`, deployment `blue`, VM `Standard_DS3_v2` × 1, identity **System-assigned**, xác thực bằng key.
-2. Role Contributor không gán role được → **Bảo** gán 2 role cho identity của endpoint:
+**Chi phí** (giá Linux `japaneast`, 11/2026): tính theo giờ VM của deployment, kể cả khi không có request – `Standard_DS2_v2` **0,205 USD/giờ (~4,9 USD/ngày)**. Endpoint không còn deployment thì không tốn tiền; deployment lỗi vẫn có thể bị tính nên xóa ngay. Hub chưa có Container Registry nên lần deploy đầu sẽ tự tạo một registry Basic (~0,17 USD/ngày, xóa ở T51).
+
+**Chọn `Standard_DS2_v2`, không dùng `Standard_DS3_v2`:** online endpoint giữ thêm 20% quota cho nâng cấp, tức cần `ceil(1,2 × số instance) × số vCPU`. Quota `japaneast` của subscription: họ DSv2 **6 vCPU**, FSv2 16, tổng 20. DS3_v2 × 1 cần 8 vCPU DSv2 → lỗi `OutOfQuota`; DS2_v2 × 1 (2 vCPU, 7 GB RAM) cần 4 → đủ, và không chung họ FSv2 với `cpu-cluster` (F4s_v2) và endpoint phân loại (F2s_v2) của Vũ. Xem quota: `az ml compute list-usage -g rg-credit-assistant -w mlw-credit-assistant -o table`.
+
+1. Foundry (classic) → `proj-credit-assistant` → Prompt flow → `credit-assistant-rag` → **Deploy**:
+   - **Basic settings:** Endpoint **New** `credit-assistant-chat`, deployment `blue`, VM `Standard_DS2_v2`, instance count `1`. *Inference data collection*: hỏi Bảo (T35) trước. Bật ở đây thì input/output được ghi vào blob mặc định của hub (`workspaceblobstore`, thư mục `modelDataCollector/credit-assistant-chat/blue/`); muốn ghi thẳng vào ADLS `stcredit23520121` thì phải deploy bằng YAML có `data_collector` và Owner gán quyền ghi cho identity của endpoint.
+   - **Advanced → Endpoint:** Authentication **Key-based**, Identity **System-assigned**, **giữ bật "Enforce access to connection secrets (preview)"**.
+   - **Outputs & connections:** giữ mặc định (đủ `answer`, `context`, `safety`; connection kế thừa từ flow).
+
+   Mất 15–30 phút (lần đầu phải tạo registry và build image). Theo dõi:
+
+   ```powershell
+   az ml online-deployment show -n blue -e credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --query provisioning_state -o tsv
+   az ml online-deployment get-logs -n blue -e credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --lines 100
+   ```
+
+2. Kiểm tra role của identity endpoint. Với System-assigned, hệ thống tự gán **AcrPull**, **Storage Blob Data Reader** và **AzureML Metrics Writer**. Vì bật "Enforce access…" và người tạo có quyền đọc secret của connection (Contributor có), role **Azure Machine Learning Workspace Connection Secrets Reader** trên project cũng được tự gán – không cần Owner:
 
    ```powershell
    $principal = az ml online-endpoint show -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --query identity.principal_id -o tsv
+   az role assignment list --assignee $principal --all --query "[].roleDefinitionName" -o tsv
+   ```
+
+   Nếu thiếu Connection Secrets Reader (log báo lỗi lấy connection) → nhờ **Bảo** chạy lệnh dưới, chờ 15–30 phút cho role có hiệu lực rồi deploy lại. Không cần role "AzureML Data Scientist".
+
+   ```powershell
    $proj = az ml workspace show -n proj-credit-assistant -g rg-credit-assistant --query id -o tsv
-   az role assignment create --assignee-object-id $principal --assignee-principal-type ServicePrincipal --role "AzureML Data Scientist" --scope $proj
    az role assignment create --assignee-object-id $principal --assignee-principal-type ServicePrincipal --role "Azure Machine Learning Workspace Connection Secrets Reader" --scope $proj
    ```
 
-3. Gọi thử: `az ml online-endpoint invoke -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --request-file promptflow/sample_request.json`. Gửi URL + key cho Hương (T37) qua kênh riêng, không commit.
-4. Sau demo: `az ml online-endpoint delete -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --yes`.
+3. Gọi thử (chạy từ `BTDA\genai`) rồi chụp ảnh: deployment **Succeeded** + tab **Test** có câu trả lời (Hình 16 trong `docs/chuong-genaiops.md`); câu độc hại bị chặn khi gọi qua endpoint (T42).
+
+   ```powershell
+   az ml online-endpoint invoke -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --request-file promptflow\sample_request.json
+   ```
+
+4. Gửi URL + key cho Hương (T37) qua kênh riêng, **không commit**:
+
+   ```powershell
+   az ml online-endpoint show -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --query scoring_uri -o tsv
+   az ml online-endpoint get-credentials -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --query primaryKey -o tsv
+   ```
+
+5. Xong buổi làm việc: **xóa deployment, giữ endpoint** – không tốn tiền, URL, key và role của identity giữ nguyên. Khi cần lại (ngày demo): Deploy như bước 1 nhưng chọn Endpoint **Existing** → `credit-assistant-chat`, deployment `blue`; nếu gọi báo không có deployment nhận traffic thì chạy `az ml online-endpoint update -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --traffic "blue=100"`.
+
+   ```powershell
+   az ml online-deployment delete -n blue -e credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --yes
+   # T51, sau demo: xóa hẳn endpoint
+   az ml online-endpoint delete -n credit-assistant-chat -g rg-credit-assistant -w proj-credit-assistant --yes
+   ```
 
 ## Kết quả
 
@@ -98,4 +136,5 @@ Endpoint tính tiền theo giờ VM, kể cả khi không có request. Giá Linu
 - Ngay sau khi tạo hub/project, `pfazure flow create` có thể báo **401** – role của managed identity cần ~10–30 phút để có hiệu lực, chờ rồi chạy lại.
 - **Content Safety chấm câu tiếng Việt rất thấp** (ví dụ "Tao sẽ giết mày" → Violence 0), nên flow có thêm lớp LLM guard; ngưỡng Content Safety đặt ở mức Low (2).
 - Bảng trong PDF bị trích xuất thành chữ rời rạc → các mức phí quan trọng được nhắc lại trong lời văn (Điều 6.5, 8.3) để truy xuất chính xác hơn.
-- Role Contributor không gán role được: việc cần role assignment (ví dụ identity của online endpoint ở T34) phải nhờ Bảo (Owner).
+- Role Contributor không gán role được: việc cần role assignment phải nhờ Bảo (Owner). Riêng identity System-assigned của online endpoint được hệ thống tự gán role (T34 bước 2).
+- **Quota online endpoint** giữ thêm 20%: `Standard_DS3_v2` × 1 cần 8 vCPU họ DSv2 trong khi quota Azure for Students chỉ có 6 → dùng `Standard_DS2_v2` (T34).
