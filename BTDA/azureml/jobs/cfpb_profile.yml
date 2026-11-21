@@ -1,0 +1,26 @@
+# TC 1.3 – Benchmark xử lý 5.9 GB trên cloud: cùng script cfpb_profile.py chạy trên laptop để so sánh.
+# Input mode download: file được chép về ổ cục bộ của node trước khi script đo thời gian,
+# giống laptop đọc từ ổ cứng của nó -> so sánh công bằng phần xử lý.
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: cfpb-profile
+experiment_name: cfpb-benchmark
+code: ../../src
+command: >-
+  python cfpb_profile.py
+  --input ${{inputs.raw_data}}
+  --out_dir ${{outputs.profile}}
+  --label azure-cpu-cluster-F4s_v2
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+compute: azureml:cpu-cluster
+identity:
+  type: managed
+inputs:
+  raw_data:
+    type: uri_folder
+    mode: download
+    path: azureml://datastores/datalake_raw/paths/cfpb/
+outputs:
+  profile:
+    type: uri_folder
+    path: azureml://datastores/datalake_processed/paths/cfpb/${{name}}/

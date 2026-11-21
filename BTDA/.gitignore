@@ -11,3 +11,6 @@ data/processed/
 .promptflow/
 genai/eval/results/
 ~$*.docx
+
+# CFPB complaints (5.87 GB) – stored in the data lake, never in git
+data/cfpb/

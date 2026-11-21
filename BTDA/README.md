@@ -48,6 +48,18 @@ az ml job create --file azureml/pipelines/etl_pipeline.yml --resource-group rg-c
 
 Pipeline đọc partition `ingest_date` mới nhất trong `raw/banking77/`, ghi kết quả vào `processed/banking77/<job-id>/`.
 
+## Dữ liệu lớn CFPB – so sánh xử lý laptop và cloud (TC 1.3)
+
+Bộ [CFPB Consumer Complaint Database](https://www.consumerfinance.gov/data-research/consumer-complaints/) (khiếu nại thật của khách hàng tài chính Mỹ, 5,87 GB CSV, ~19,3 triệu dòng) không dùng để train. Nhóm dùng nó để phân tích khiếu nại thẻ tín dụng và làm khối lượng xử lý lớn khi so sánh hiệu năng.
+
+| Bước | Lệnh | Kết quả |
+|---|---|---|
+| Nạp vào Data Lake (chạy trong Azure) | `az ml job create -f azureml/jobs/cfpb_ingest.yml -g rg-credit-assistant -w mlw-credit-assistant` | `raw/cfpb/ingest_date=YYYY-MM-DD/complaints.csv` + `manifest.json` |
+| Xử lý trên cloud | `az ml job create -f azureml/jobs/cfpb_profile.yml -g rg-credit-assistant -w mlw-credit-assistant` | `processed/cfpb/<job-id>/` |
+| Xử lý trên laptop | tải zip về `data/cfpb/` (đã gitignore), giải nén, rồi `python src/cfpb_profile.py --input data/cfpb --label laptop` | `outputs/cfpb/` |
+
+`cfpb_profile.py` đọc theo từng phần 500.000 dòng, lọc khiếu nại thẻ tín dụng, thống kê theo năm/loại vấn đề và ghi thời gian chạy, RAM tối đa, tốc độ vào `perf_<label>.json`.
+
 ## CI/CD – GitHub Actions (T45)
 
 | Workflow | Khi nào chạy | Làm gì | Cần Azure? |

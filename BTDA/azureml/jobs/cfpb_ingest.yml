@@ -1,0 +1,17 @@
+# TC 1.3 – Nạp bộ CFPB Consumer Complaint Database (~5.9 GB CSV) vào vùng raw của Data Lake.
+# Tải và giải nén chạy ngay trong Azure (không qua mạng của laptop). Đổi ingest_date trong path khi nạp đợt mới.
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: cfpb-ingest
+experiment_name: cfpb-benchmark
+code: ../../src
+command: python cfpb_ingest.py --out_dir ${{outputs.raw_data}}
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+compute: azureml:cpu-cluster
+identity:
+  type: managed            # cluster managed identity có quyền ghi Data Lake
+outputs:
+  raw_data:
+    type: uri_folder
+    mode: upload           # ghi ra ổ cục bộ rồi upload một lần (nhanh hơn ghi qua mount)
+    path: azureml://datastores/datalake_raw/paths/cfpb/ingest_date=2026-11-21/
