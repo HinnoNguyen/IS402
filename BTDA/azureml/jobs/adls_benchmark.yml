@@ -1,0 +1,17 @@
+# T20 / TC 3.1 – Đo tốc độ đọc ghi Data Lake từ máy cloud (cùng region japaneast) để so với laptop.
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: adls-benchmark
+experiment_name: adls-benchmark
+code: ../../src
+command: >-
+  pip install -q azure-storage-blob azure-identity &&
+  python adls_benchmark.py --label azure-F4s_v2 --out_dir ${{outputs.result}}
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+compute: azureml:cpu-cluster
+identity:
+  type: managed            # managed identity của cluster đã có Storage Blob Data Contributor trên Data Lake
+outputs:
+  result:
+    type: uri_folder
+    path: azureml://datastores/datalake_processed/paths/benchmark/${{name}}/
