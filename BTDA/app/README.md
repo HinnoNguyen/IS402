@@ -61,15 +61,45 @@ cd BTDA\app
 .venv\Scripts\python latency_test.py `
     --target japaneast=azureml:credit-intent-endpoint@mlw-credit-assistant `
     --target <region-2>=azureml:<endpoint-2>@<workspace-2> -n 50
-# Hoặc đo 1 URL bất kỳ, ví dụ web demo đã deploy (T40)
-.venv\Scripts\python latency_test.py --target web-azure=https://<app>.azurewebsites.net/api/classify `
-    --request-file <file-json> -n 50
+# Hoặc đo qua web demo: web trên Azure (T40) so với web chạy local – cùng body latency_request_web.json
+.venv\Scripts\python latency_test.py `
+    --target web-azure=https://app-credit-assistant-is402.azurewebsites.net/api/classify `
+    --target web-local=http://localhost:8000/api/classify `
+    --request-file latency_request_web.json -n 50
 ```
 
 Script dừng và báo lỗi nếu endpoint chưa có deployment nhận traffic. Endpoint thứ hai ở region khác chưa có. Nhóm cần thống nhất với Vũ trước khi tạo, vì nó tốn tiền theo giờ và quota vCPU của mỗi region khác nhau.
 
+## Deploy lên Azure App Service (T40)
+
+**URL:** https://app-credit-assistant-is402.azurewebsites.net
+
+| Tài nguyên | Tên | Cấu hình |
+|---|---|---|
+| App Service plan | `plan-credit-assistant` | Linux, **F1 (Free, 0 USD)**, `japaneast` |
+| Web app | `app-credit-assistant-is402` | Python 3.12, gunicorn + uvicorn worker (2 worker), chỉ HTTPS (TLS ≥ 1.2), tắt FTP/FTPS |
+
+Deploy hoặc cập nhật (cần `az login`, quyền Contributor trên RG). Chạy lại nhiều lần được, lần sau chỉ cập nhật code và cấu hình:
+
+```powershell
+cd BTDA\app
+.\deploy_webapp.ps1
+```
+
+Script làm 3 việc:
+1. Tạo plan và web app nếu chưa có.
+2. Đặt lệnh khởi động và bật HTTPS-only. Chép các dòng `CLASSIFIER_*` / `CHAT_*` có giá trị từ `.env` vào **App settings** (biến môi trường trên Azure). Script không in giá trị ra màn hình.
+3. Đóng gói **chỉ** `main.py`, `requirements.txt` và `static/` (không có `.env`, `.venv`, test), rồi zip deploy. Azure tự cài thư viện từ `requirements.txt`.
+
+Khi đổi URL hoặc key (ví dụ Bằng gửi URL chatbot, hoặc Vũ tạo lại key), sửa `.env` rồi chạy lại script.
+
+**Giới hạn của gói F1:** 60 phút CPU mỗi ngày. Web ngủ sau khoảng 20 phút không có truy cập, nên lần mở đầu tiên sau đó mất khoảng 30–60 giây để khởi động. Trước buổi demo nên mở web trước vài phút. Endpoint đang tắt thì web vẫn chạy, chỉ báo lỗi ở trang tương ứng.
+
+Xem log: `az webapp log tail -n app-credit-assistant-is402 -g rg-credit-assistant`. Xóa sau demo (T51): `az webapp delete -n app-credit-assistant-is402 -g rg-credit-assistant` và `az appservice plan delete -n plan-credit-assistant -g rg-credit-assistant --yes`.
+
+Ảnh minh chứng T40: web chạy trên URL Azure và trả kết quả thật, kèm trang Overview của web app trên Portal (URL, Status Running, plan F1).
+
 ## Việc tiếp theo
 
-- **T37:** điền `.env` khi T34 (chatbot) xong và endpoint phân loại được bật lại.
-- **T39:** thêm nút Thích/Không thích. Backend sẽ có `POST /api/feedback` ghi vào Cosmos DB (T38 của Bảo).
-- **T40:** deploy lên App Service (Linux, Python). Lệnh khởi động `uvicorn main:app --host 0.0.0.0 --port 8000`, URL và key đặt trong *App settings*, không đặt trong code.
+- **T37:** đã nối endpoint phân loại. Còn chatbot, điền `CHAT_URL` và `CHAT_KEY` khi T34 xong, rồi chạy lại `deploy_webapp.ps1`.
+- **T39:** thêm nút Thích/Không thích. Backend sẽ có `POST /api/feedback` ghi vào Cosmos DB `cosmos-credit-23520121` (T38 của Bảo).

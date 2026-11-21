@@ -46,6 +46,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+html { background: var(--bg); min-height: 100%; }
 
 body {
   margin: 0;
