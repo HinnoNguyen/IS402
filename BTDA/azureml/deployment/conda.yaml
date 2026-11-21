@@ -19,3 +19,4 @@ dependencies:
       - joblib
       - xgboost>=3,<4
       - azureml-inference-server-http
+      - azureml-ai-monitoring
