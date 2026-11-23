@@ -130,7 +130,7 @@ Bản ghi (một câu trả lời ứng với một bản ghi; bấm lại hoặ
 **Xác thực bằng Microsoft Entra ID, không dùng key** (`DefaultAzureCredential`):
 
 - **Local:** `az login` bằng tài khoản đã được cấp role *Cosmos DB Built-in Data Contributor* trên database `credit-assistant`, rồi điền `COSMOS_ENDPOINT` vào `.env`. Để trống thì phản hồi chỉ lưu trong bộ nhớ (MOCK).
-- **App Service:** `deploy_webapp.ps1` bật system-assigned managed identity cho web app và in **Object ID**. Gửi Object ID cho Owner (Bảo) để cấp cùng role đó. Trước khi được cấp, nút vẫn hiện nhưng báo "Chưa gửi được".
+- **App Service:** `deploy_webapp.ps1` bật system-assigned managed identity cho web app và in **Object ID**. Owner (Bảo) cấp cùng role đó cho Object ID này (đã cấp ngày 23/11/2026). Role mới cấp có thể mất vài phút mới có hiệu lực. Trong lúc đó web báo "Chưa gửi được" (lỗi 403), đợi rồi thử lại. Nếu tạo lại web app thì Object ID đổi, phải nhờ cấp lại.
 
 Backend giới hạn 30 lần gửi mỗi phút cho mỗi IP, để tránh spam làm tốn RU của gói Free. Xem dữ liệu: Portal → `cosmos-credit-23520121` → **Data Explorer** → `credit-assistant` → `feedback` → Items.
 
@@ -138,4 +138,4 @@ Backend giới hạn 30 lần gửi mỗi phút cho mỗi IP, để tránh spam 
 
 ## Việc tiếp theo
 
-- **T39:** Bảo cấp role *Cosmos DB Built-in Data Contributor* cho managed identity của web app, rồi chụp ảnh Data Explorer.
+- **T39:** chụp ảnh Data Explorer (bản ghi feedback) cho báo cáo.
