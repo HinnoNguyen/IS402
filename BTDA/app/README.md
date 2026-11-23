@@ -68,6 +68,16 @@ cd BTDA\app
     --request-file latency_request_web.json -n 50
 ```
 
+Đo độ trễ mạng thuần tới server (không gọi model) bằng `--method GET`, ví dụ so sánh server ở 2 region:
+
+```powershell
+.venv\Scripts\python latency_test.py --method GET `
+    --target japaneast=https://app-credit-assistant-is402.azurewebsites.net/api/health `
+    --target <region-2>=https://<web-app-region-2>.azurewebsites.net/api/health -n 100
+```
+
+Kết quả đo ngày 23/11/2026 (server japaneast so với koreacentral, endpoint model ở japaneast) đã ghi trong báo cáo, mục 3.4. Bản web ở koreacentral được xóa ngay sau khi đo.
+
 Script dừng và báo lỗi nếu endpoint chưa có deployment nhận traffic. Endpoint thứ hai ở region khác chưa có. Nhóm cần thống nhất với Vũ trước khi tạo, vì nó tốn tiền theo giờ và quota vCPU của mỗi region khác nhau.
 
 ## Deploy lên Azure App Service (T40)

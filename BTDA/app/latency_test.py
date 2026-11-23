@@ -72,14 +72,14 @@ def percentile(values: list[float], p: float) -> float:
     return ordered[lo] + (ordered[hi] - ordered[lo]) * (k - lo)
 
 
-def measure(target: dict, body: dict, n: int, warmup: int, timeout: float) -> dict:
+def measure(target: dict, body: dict | None, n: int, warmup: int, timeout: float, method: str = "POST") -> dict:
     """Gửi warmup + n request tuần tự trên 1 kết nối keep-alive; request đầu tiên đo riêng (gồm DNS + TLS)."""
     samples, errors, first_ms = [], 0, None
     with httpx.Client(timeout=timeout, headers=target["headers"]) as client:
         for i in range(warmup + n):
             start = time.perf_counter()
             try:
-                resp = client.post(target["url"], json=body)
+                resp = client.request(method, target["url"], json=body if method == "POST" else None)
                 ok = resp.status_code < 400 and '"error"' not in resp.text[:200]  # scoring script trả {"error": ...}
             except httpx.HTTPError:
                 ok = False
@@ -151,7 +151,9 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--target", action="append", required=True, metavar="NHÃN=NGUỒN")
-    parser.add_argument("--request-file", default=str(DEFAULT_REQUEST), help="JSON body gửi đi")
+    parser.add_argument("--request-file", default=str(DEFAULT_REQUEST), help="JSON body gửi đi (POST)")
+    parser.add_argument("--method", choices=["POST", "GET"], default="POST",
+                        help="GET để đo độ trễ mạng thuần tới server, ví dụ /api/health của web demo")
     parser.add_argument("-n", type=int, default=30, help="Số request đo cho mỗi target (mặc định 30)")
     parser.add_argument("--warmup", type=int, default=3, help="Số request khởi động, không tính (mặc định 3)")
     parser.add_argument("--timeout", type=float, default=60)
@@ -159,7 +161,7 @@ def main():
     parser.add_argument("--out-dir", default=str(APP_DIR / "outputs" / "latency"))
     args = parser.parse_args()
 
-    body = json.loads(Path(args.request_file).read_text(encoding="utf-8"))
+    body = json.loads(Path(args.request_file).read_text(encoding="utf-8")) if args.method == "POST" else None
     targets = []
     for item in args.target:
         label, sep, spec = item.partition("=")
@@ -167,8 +169,8 @@ def main():
             sys.exit(f"--target {item!r}: cần dạng NHÃN=NGUỒN")
         targets.append(resolve(label.strip(), spec.strip(), args.resource_group))
 
-    print(f"Đo {args.n} request/target (khởi động {args.warmup}) từ máy này...")
-    results = [measure(t, body, args.n, args.warmup, args.timeout) for t in targets]
+    print(f"Đo {args.n} request {args.method}/target (khởi động {args.warmup}) từ máy này...")
+    results = [measure(t, body, args.n, args.warmup, args.timeout, args.method) for t in targets]
     print("\n" + to_markdown(results))
     stem = save(results, Path(args.out_dir))
     print(f"\nĐã lưu: {stem}.csv / .md / .png")
