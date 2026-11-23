@@ -161,6 +161,22 @@ details.sources .excerpt { color: var(--muted); display: block; white-space: pre
 
 .typing { color: var(--muted); font-style: italic; }
 
+/* Thích / Không thích (T39) */
+.feedback { display: grid; gap: 6px; margin-top: 4px; }
+.prediction .feedback { grid-column: 1 / -1; margin-top: 0; }
+.fb-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fb-btn {
+  font-size: .875rem; line-height: 1; cursor: pointer; padding: 4px 9px;
+  background: none; border: 1px solid var(--border); border-radius: 999px; filter: grayscale(1); opacity: .75;
+}
+.fb-btn:hover, .fb-btn[aria-pressed="true"] { filter: none; opacity: 1; }
+.fb-btn.up[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); }
+.fb-btn.down[aria-pressed="true"] { background: var(--danger-soft); border-color: var(--danger); }
+.fb-status { font-size: .75rem; color: var(--muted); }
+.fb-comment { display: flex; gap: 6px; max-width: 520px; }
+.fb-comment input { margin-top: 0; padding: 6px 10px; font-size: .875rem; }
+.fb-comment button { flex: none; white-space: nowrap; }
+
 .chat-form { display: flex; gap: 8px; }
 .chat-form input { margin-top: 0; }
 
