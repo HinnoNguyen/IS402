@@ -1,8 +1,9 @@
-"""Web demo Trợ lý tín dụng (T36, T37).
+"""Web demo Trợ lý tín dụng (T36, T37, T39).
 
 FastAPI phục vụ giao diện tĩnh trong `static/` và làm proxy tới 2 Azure ML managed online endpoint:
   - CLASSIFIER_*: model phân loại ý định (BTDA/azureml/deployment/main.py) – nhận {"data": [...]}
   - CHAT_*:       Prompt Flow RAG chatbot (BTDA/genai/promptflow/credit-assistant) – nhận {"question", "chat_history"}
+Nút Thích/Không thích ghi vào Cosmos DB (COSMOS_*), xác thực bằng Entra ID, không dùng key.
 
 Key của endpoint chỉ nằm ở backend (biến môi trường / file .env không commit), trình duyệt không thấy.
 Endpoint nào chưa cấu hình URL thì chạy chế độ MOCK (dữ liệu giả) để web vẫn chạy được ở local.
@@ -16,12 +17,16 @@ import logging
 import os
 import re
 import time
+from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated, Literal
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -163,20 +168,99 @@ def _mock_chat(question: str) -> dict:
             "context": context, "safety": {"safe": True}}
 
 
+# ---------- Phản hồi Thích/Không thích (T39) ----------
+
+class FeedbackRequest(BaseModel):
+    # id do trình duyệt sinh cho mỗi câu trả lời -> bấm lại / đổi ý / thêm góp ý thì ghi đè cùng bản ghi
+    id: str = Field(pattern=r"^[A-Za-z0-9-]{8,64}$")
+    session_id: str = Field(pattern=r"^[A-Za-z0-9-]{8,64}$")
+    kind: Literal["chat", "classify"] = "chat"
+    rating: Literal["up", "down"]
+    question: str = Field(min_length=1, max_length=2000)  # câu hỏi chat / câu đem phân loại
+    answer: str = Field(min_length=1, max_length=8000)    # câu trả lời chatbot / nhãn dự đoán
+    # "Nguồn i: tiêu đề – đoạn trích" -> T43 biết đoạn tài liệu nào bị đánh giá sai
+    sources: list[Annotated[str, Field(max_length=400)]] = Field(default_factory=list, max_length=10)
+    blocked: bool = False                                 # câu trả lời do bộ lọc an toàn chặn
+    confidence: float | None = Field(default=None, ge=0, le=1)  # chỉ cho kind=classify
+    model_mode: Literal["live", "mock"] = "live"          # câu trả lời đến từ Azure hay MOCK
+    comment: str = Field(default="", max_length=500)
+
+
+class FeedbackStore:
+    """Ghi phản hồi vào Cosmos DB (container partition key /session_id).
+
+    Xác thực bằng Microsoft Entra ID (DefaultAzureCredential), không dùng key:
+      - local: tài khoản `az login` (Bảo đã cấp Cosmos DB Built-in Data Contributor trên database)
+      - App Service: system-assigned managed identity của web app
+    Chưa cấu hình COSMOS_ENDPOINT (hoặc MOCK_MODE) -> lưu tạm trong bộ nhớ để web vẫn chạy ở local.
+    """
+
+    def __init__(self):
+        self.endpoint = os.getenv("COSMOS_ENDPOINT", "").strip()
+        self.database = os.getenv("COSMOS_DATABASE", "credit-assistant").strip()
+        self.container_name = os.getenv("COSMOS_CONTAINER", "feedback").strip()
+        self._container = None
+        self.memory: dict[str, dict] = {}
+
+    @property
+    def live(self) -> bool:
+        return bool(self.endpoint) and os.getenv("MOCK_MODE", "").lower() not in ("1", "true", "yes")
+
+    def _get_container(self):
+        if self._container is None:
+            from azure.cosmos import CosmosClient  # import trễ: chế độ MOCK/test không cần thư viện Azure
+            from azure.identity import DefaultAzureCredential
+
+            client = CosmosClient(self.endpoint, credential=DefaultAzureCredential())
+            self._container = client.get_database_client(self.database).get_container_client(self.container_name)
+        return self._container
+
+    def save(self, doc: dict) -> None:
+        if self.live:
+            self._get_container().upsert_item(doc)
+        else:
+            self.memory[doc["id"]] = doc
+
+
+class RateLimiter:
+    """Giới hạn số lần gửi phản hồi theo IP (trong 1 worker) – chặn spam làm tốn RU của Cosmos DB free tier."""
+
+    def __init__(self, limit: int, window_s: float):
+        self.limit, self.window_s = limit, window_s
+        self.hits: dict[str, deque] = defaultdict(deque)
+
+    def allow(self, key: str) -> bool:
+        now, q = time.monotonic(), self.hits[key]
+        while q and now - q[0] > self.window_s:
+            q.popleft()
+        if len(q) >= self.limit:
+            return False
+        q.append(now)
+        return True
+
+
+def client_ip(request: Request) -> str:
+    # App Service đứng sau front-end proxy: IP thật nằm ở X-Forwarded-For ("ip:port, ...")
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+
+
 # ---------- App ----------
 
 app = FastAPI(title="Trợ lý tín dụng – Web demo", docs_url="/api/docs", redoc_url=None)
 CLASSIFIER = Endpoint.from_env("CLASSIFIER")
 CHAT = Endpoint.from_env("CHAT")
+FEEDBACK = FeedbackStore()
+FEEDBACK_LIMIT = RateLimiter(limit=30, window_s=60)
 
 
-def _mode(ep: Endpoint) -> str:
+def _mode(ep: Endpoint | FeedbackStore) -> str:
     return "live" if ep.live else "mock"
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "classifier": _mode(CLASSIFIER), "chat": _mode(CHAT)}
+    return {"status": "ok", "classifier": _mode(CLASSIFIER), "chat": _mode(CHAT), "feedback": _mode(FEEDBACK)}
 
 
 @app.post("/api/classify")
@@ -208,6 +292,20 @@ async def chat(req: ChatRequest):
     return {"mode": _mode(CHAT), "latency_ms": round((time.perf_counter() - start) * 1000, 1),
             "answer": raw["answer"], "blocked": safety.get("safe") is False,
             "sources": parse_sources(raw.get("context", "")), "safety": safety}
+
+
+@app.post("/api/feedback")
+async def feedback(req: FeedbackRequest, request: Request):
+    if not FEEDBACK_LIMIT.allow(client_ip(request)):
+        raise HTTPException(429, "Gửi phản hồi quá nhanh, vui lòng thử lại sau ít phút")
+    doc = req.model_dump()
+    doc["created_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        await run_in_threadpool(FEEDBACK.save, doc)
+    except Exception as ex:  # lỗi xác thực / quyền / mạng của Cosmos DB
+        log.exception("Không ghi được phản hồi vào Cosmos DB")
+        raise HTTPException(502, f"Không ghi được phản hồi vào Cosmos DB: {type(ex).__name__}") from ex
+    return {"mode": _mode(FEEDBACK), "id": req.id, "rating": req.rating}
 
 
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")

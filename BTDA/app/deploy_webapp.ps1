@@ -42,6 +42,12 @@ Invoke-Az webapp config set -n $Name -g $ResourceGroup --startup-file `
     --ftps-state Disabled --min-tls-version 1.2 -o none
 Invoke-Az webapp update -n $Name -g $ResourceGroup --https-only true -o none
 
+# Managed identity (T39): web app ghi Cosmos DB bằng Entra ID, không dùng key.
+# Lệnh assign chạy lại nhiều lần vẫn giữ nguyên identity cũ. Owner (Bảo) cấp role
+# "Cosmos DB Built-in Data Contributor" cho Object ID này trên database credit-assistant.
+$principalId = Invoke-Az webapp identity assign -n $Name -g $ResourceGroup --query principalId -o tsv
+Write-Host "Managed identity của web app – Object ID: $principalId"
+
 $settings = @("SCM_DO_BUILD_DURING_DEPLOYMENT=true")
 if (Test-Path .env) {
     foreach ($line in Get-Content .env) {
