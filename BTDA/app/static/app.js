@@ -116,6 +116,12 @@ $("#classify-form").addEventListener("submit", async (e) => {
 // ---------- Chat ----------
 let history = []; // [{question, answer}] – chỉ lưu các lượt không bị chặn
 
+// Đoạn trích lấy từ PDF còn nhiều dòng trống, khoảng trắng thừa -> gộp lại cho gọn rồi cắt bớt
+function shorten(text, max) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? flat.slice(0, max).trimEnd() + "…" : flat;
+}
+
 function addMessage(role, text, extra = {}) {
   const box = $("#messages");
   const msg = el("div", { class: `msg ${role}${extra.cls ? " " + extra.cls : ""}` },
@@ -125,7 +131,7 @@ function addMessage(role, text, extra = {}) {
       el("summary", {}, `Nguồn trích dẫn (${extra.sources.length})`),
       el("ol", {}, ...extra.sources.map((s) =>
         el("li", {}, el("strong", {}, s.title),
-          el("span", { class: "excerpt" }, s.excerpt.length > 400 ? s.excerpt.slice(0, 400) + "…" : s.excerpt))))));
+          el("span", { class: "excerpt" }, shorten(s.excerpt, 300)))))));
   }
   if (extra.meta) msg.append(el("span", { class: "meta" }, extra.meta));
   box.append(msg);
