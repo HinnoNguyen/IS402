@@ -12,6 +12,8 @@
 | `azureml/` | YAML cho Azure ML: datastore, compute cluster, component, pipeline ETL, schedule |
 | `genai/` | GenAIOps: tài liệu điều khoản thẻ (RAG), AI Search index, Prompt Flow chatbot, evaluation, Content Safety – xem [genai/README.md](genai/README.md) |
 | `app/` | Web demo (FastAPI + HTML/JS): trang phân loại và trang chat gọi 2 endpoint, script đo độ trễ theo region – xem [app/README.md](app/README.md) |
+| `functions/feedback_report/` | Azure Function (T43): tổng hợp phản hồi *Không thích* từ Cosmos DB thành báo cáo trong Data Lake – xem mục bên dưới |
+| `infra/main.bicep` | Hạ tầng dạng code (T16): Data Lake, Cosmos DB, AI Search, AI Services, Azure ML, web app, Function và phân quyền |
 | `../.github/workflows/` | CI/CD bằng GitHub Actions: `ci.yml` (train + quality gate, test web), `cd.yml` (train trên Azure ML → đăng ký model → deploy blue/green) – xem mục CI/CD bên dưới |
 
 ## Tài nguyên Azure (region `japaneast`)
@@ -93,4 +95,32 @@ Bộ [CFPB Consumer Complaint Database](https://www.consumerfinance.gov/data-res
 
    `AzureML Data Scientist` cho phép chạy job, đăng ký model và quản lý online endpoint, nhưng không cho tạo hay xóa compute. `Storage Blob Data Reader` cần vì datastore `datalake_raw` dùng identity-based access.
 
+**Trạng thái (28/11/2026):** bước 1 và 2 đã xong (identity `id-github-cicd`, federated credential cho `main`, 2 role). Chỉ còn bước 3.
+
 3. Chủ repo vào GitHub → Settings → Secrets and variables → Actions, tạo 3 **secret**: `AZURE_CLIENT_ID` (lấy bằng `az identity show -n id-github-cicd -g rg-credit-assistant --query clientId -o tsv`), `AZURE_TENANT_ID` và `AZURE_SUBSCRIPTION_ID` (lấy bằng `az account show --query "{tenant:tenantId, sub:id}"`). Phải để ở dạng *secret*, không để ở dạng *variable*, vì repo public: secret được che thành `***` trong log.
+
+## Azure Function xử lý phản hồi (T43)
+
+`func-credit-feedback-is402` (Consumption plan, Linux, Python 3.11) đọc các phản hồi `rating = "down"` trong Cosmos DB `credit-assistant/feedback`, gom theo câu hỏi và gợi ý hướng xử lý (thêm dữ liệu huấn luyện, bổ sung tài liệu RAG, xem lại bộ lọc an toàn, sửa prompt). Báo cáo ghi vào `processed/feedback/report_date=YYYY-MM-DD/dislikes.csv` và `dislikes.json`.
+
+| Trigger | Khi nào |
+|---|---|
+| Timer `0 30 18 * * *` (UTC) | 01:30 giờ Việt Nam hằng ngày, sau pipeline ETL |
+| HTTP `GET /api/feedback-report` | Chạy ngay, trả về bản tóm tắt (cần function key) |
+
+Function dùng managed identity, không có key trong code: **Cosmos DB Built-in Data Reader** trên database và **Storage Blob Data Contributor** trên Data Lake. Deploy lại (Owner chạy để gán role):
+
+```powershell
+cd BTDA\functions\feedback_report
+.\deploy_function.ps1
+```
+
+## Hạ tầng dạng code – Bicep (T16)
+
+`infra/main.bicep` mô tả các tài nguyên chính và phân quyền managed identity. Kiểm tra file khớp với hạ tầng đang chạy mà không thay đổi gì:
+
+```powershell
+az deployment group what-if -g rg-credit-assistant -f BTDA/infra/main.bicep
+```
+
+Dựng lại ở Resource Group khác: `az deployment group create -g <rg-mới> -f BTDA/infra/main.bicep -p suffix=<hậu-tố-mới> deployModels=false`. Online endpoint và deployment vẫn tạo bằng YAML trong `azureml/deployment` và `genai/`.
