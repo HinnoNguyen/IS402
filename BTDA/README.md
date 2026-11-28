@@ -27,6 +27,7 @@
 | Azure AI Services (GenAI) | `ais-credit-assistant` – deployment `gpt-4.1-mini`, `text-embedding-3-small` |
 | Azure AI Search (Free) | `srch-credit-assistant` – index `credit-card-policy` |
 | Foundry hub / project | `hub-credit-assistant` / `proj-credit-assistant` – flow `credit-assistant-rag` |
+| App Service (web demo) | `app-credit-assistant-is402` trên plan `plan-credit-assistant` (Linux F1, miễn phí) – https://app-credit-assistant-is402.azurewebsites.net |
 
 ## Chạy trên máy
 

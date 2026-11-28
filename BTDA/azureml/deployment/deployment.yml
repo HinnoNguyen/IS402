@@ -10,3 +10,11 @@ environment:
   image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
 instance_type: Standard_F2s_v2
 instance_count: 1
+data_collector:
+  sampling_rate: 1.0
+  rolling_rate: hour
+  collections:
+    model_inputs:
+      enabled: "true"
+    model_outputs:
+      enabled: "true"

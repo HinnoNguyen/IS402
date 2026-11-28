@@ -1,0 +1,51 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+
+display_name: credit-intent-drift-monitor-cpu
+experiment_name: credit-intent-drift-monitoring
+description: T41 Prediction Drift (JSD, PSI, Chi2) và Input/Slang OOV Drift trên cpu-cluster đọc log Data Collector (model_inputs, model_outputs) so với Banking77 baseline.
+
+command: >-
+  python src/drift_monitor.py
+  --baseline_csv ${{inputs.baseline_data}}
+  --prod_outputs_dir ${{inputs.prod_outputs}}
+  --prod_inputs_dir ${{inputs.prod_inputs}}
+  --out_dir ${{outputs.drift_output}}
+  --jsd_threshold 0.10
+  --psi_threshold 0.20
+
+code: ../../
+
+inputs:
+  baseline_data:
+    type: uri_file
+    path: azureml:banking77-train-baseline:1
+  prod_outputs:
+    type: uri_folder
+    path: azureml:credit-intent-endpoint-blue-model_outputs:1
+  prod_inputs:
+    type: uri_folder
+    path: azureml:credit-intent-endpoint-blue-model_inputs:1
+
+outputs:
+  drift_output:
+    type: uri_folder
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+  conda_file:
+    name: custom-env
+    channels:
+      - conda-forge
+    dependencies:
+      - python=3.10
+      - pip
+      - pip:
+        - scikit-learn
+        - xgboost
+        - azureml-mlflow
+        - mlflow==2.22.2
+        - pandas
+        - numpy
+
+compute: azureml:cpu-cluster

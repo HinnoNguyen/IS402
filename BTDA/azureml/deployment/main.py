@@ -14,12 +14,19 @@ import os
 
 import mlflow
 import pandas as pd
+from azureml.ai.monitoring import Collector
 
 model = None
+inputs_collector = None
+outputs_collector = None
+
+
+def _on_collector_error(ex):
+    logging.warning("Data collector error: %s", ex)
 
 
 def init():
-    global model
+    global model, inputs_collector, outputs_collector
     base_path = os.getenv("AZUREML_MODEL_DIR")
     if not base_path:
         raise RuntimeError("AZUREML_MODEL_DIR is not set")
@@ -39,6 +46,9 @@ def init():
         )
 
     model = mlflow.pyfunc.load_model(model_path)
+    # Khởi tạo Data Collector (T35/T41); on_error tránh làm sập scoring nếu chạy local
+    inputs_collector = Collector(name="model_inputs", on_error=_on_collector_error)
+    outputs_collector = Collector(name="model_outputs", on_error=_on_collector_error)
     logging.info("Model loaded successfully from %s", model_path)
 
 
@@ -67,7 +77,10 @@ def run(raw_data):
         if "text" not in model_input.columns:
             raise ValueError("Input must contain a 'text' column")
 
+        context = inputs_collector.collect(model_input) if inputs_collector else None
         predictions = model.predict(model_input)
+        if outputs_collector:
+            outputs_collector.collect(predictions, context)
         return {"predictions": predictions.to_dict(orient="records")}
     except Exception as ex:  # trả lỗi rõ ràng thay vì HTTP 502 khó debug
         logging.exception("Scoring failed")
